@@ -31,8 +31,10 @@ junior_high:筑波大学附属中学校:
     grade1: []
     grade2:
     - name: Ohkate
-      rank: '52'
-    grade3: []
+      rank: '51'
+    grade3:
+    - name: Meis_Meiko
+      rank: '95'
   L_H:
     grade1: []
     grade2: []
@@ -49,84 +51,84 @@ high:筑波大学附属高等学校:
   P_A:
     grade1:
     - name: yuubinnkyoku
-      rank: '36'
+      rank: '32'
     - name: mainay
-      rank: '40'
+      rank: '44'
     - name: lemonydrink
-      rank: '68'
+      rank: '73'
     grade2:
     - name: frostflower
-      rank: '46'
+      rank: '47'
     - name: uiroumochi
       rank: '50'
     - name: Lsq_nine
-      rank: '165'
+      rank: '168'
     grade3:
     - name: Astroseek
       rank: '16'
     - name: taiki1121
-      rank: '34'
+      rank: '36'
     - name: neko10
-      rank: '126'
+      rank: '127'
   P_H:
     grade1:
     - name: yuubinnkyoku
-      rank: '13'
-    - name: lemonydrink
       rank: '18'
+    - name: lemonydrink
+      rank: '20'
     grade2:
     - name: frostflower
-      rank: '10'
+      rank: '14'
     - name: Lsq_nine
-      rank: '16'
+      rank: '17'
     - name: uiroumochi
-      rank: '29'
+      rank: '31'
     grade3:
     - name: Nom8
-      rank: '40'
+      rank: '41'
     - name: taiki1121
-      rank: '43'
+      rank: '44'
     - name: neko10
-      rank: '53'
+      rank: '55'
   L_A:
     grade1:
     - name: yuubinnkyoku
-      rank: '31'
+      rank: '32'
     - name: mainay
-      rank: '41'
+      rank: '44'
     - name: lemonydrink
-      rank: '69'
+      rank: '71'
     grade2:
     - name: frostflower
-      rank: '46'
+      rank: '47'
     - name: uiroumochi
       rank: '50'
     - name: Lsq_nine
-      rank: '165'
+      rank: '168'
     grade3:
     - name: Astroseek
       rank: '16'
     - name: taiki1121
-      rank: '34'
+      rank: '36'
     - name: neko10
-      rank: '126'
+      rank: '127'
   L_H:
     grade1:
     - name: yuubinnkyoku
-      rank: '13'
-    - name: lemonydrink
       rank: '18'
+    - name: lemonydrink
+      rank: '20'
     grade2:
     - name: frostflower
-      rank: '10'
+      rank: '14'
     - name: Lsq_nine
-      rank: '16'
+      rank: '17'
     - name: uiroumochi
-      rank: '29'
+      rank: '31'
     grade3:
     - name: Nom8
-      rank: '40'
+      rank: '41'
     - name: taiki1121
-      rank: '43'
+      rank: '44'
     - name: neko10
-      rank: '53'
+      rank: '55'
