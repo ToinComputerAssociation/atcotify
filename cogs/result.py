@@ -14,6 +14,17 @@ import requests
 import yaml
 from discord import app_commands
 from discord.ext import commands, tasks
+
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
+from cogs.delivery_state import (
+    KIND_RESULT_SENT,
+    contest_key,
+    get_shared_store,
+)
+from cogs.time_utils import now_jst_naive
 from google.oauth2.service_account import Credentials
 from pdf2image import convert_from_path
 from pdf2image.exceptions import (
@@ -43,7 +54,9 @@ class Contest_result(commands.Cog):
         self.results_config = self.load_results_config()
         self.contests = self.load_contests()
         self.check_contest_end.start()
-        self.retry_count = 0  # リトライカウントを初期化
+        self.store = get_shared_store()
+        # (コンテストキー, サーバーID) ごとの送信失敗回数。10回でそのペアは打ち切る
+        self._result_send_failures: dict[tuple[str, str], int] = {}
 
     def load_results_config(self):
         """結果送信チャンネル設定をYAMLファイルから読み込む"""
@@ -517,7 +530,6 @@ class Contest_result(commands.Cog):
                             image_file = discord.File(f, filename=f"{contest_id}.png")
                         await channel.send(file=image_file)  # 画像のみ送信
                         print(f"{contest['name']} のコンテスト結果を送信しました。")
-                        self.retry_count = 0  # リトライカウントをリセット
                         return True
                     else:
                         print(f"結果送信チャンネルが見つかりません: {channel_id}")
@@ -577,6 +589,7 @@ class Contest_result(commands.Cog):
         name="result---set_channel",
         description="コンテスト結果を送信するチャンネルを設定",
     )
+    @can_manage_bot_settings()
     async def set_result_channel(self, interaction: discord.Interaction):
         """リマインダー送信チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -585,38 +598,67 @@ class Contest_result(commands.Cog):
             "コンテスト結果送信チャンネルを選択してください", view=view, ephemeral=False
         )
 
+    def _current_contests(self):
+        """最新のコンテスト一覧を ContestData Cog から取得する。
+
+        起動時に読み込んだ self.contests は更新されないため、毎回こちらを使う。
+        ContestData が無い場合だけ起動時の読み込みにフォールバックする。
+        """
+        contest_data_cog = self.bot.get_cog("ContestData")
+        if contest_data_cog is not None and getattr(contest_data_cog, "contests", None):
+            return contest_data_cog.contests
+        return self.contests
+
     @tasks.loop(minutes=1)
     async def check_contest_end(self):
         """コンテスト終了時刻をチェックし、結果を自動送信する"""
-        now = datetime.datetime.now()
-        updated_contests = []
-        for contest in self.contests:
+        await self._send_due_results()
+
+    async def _send_due_results(self):
+        now = now_jst_naive()
+        now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        # サーバーごとに結果通知の有効化時刻を基準にし、それ以前に終了した
+        # コンテストは送らない（導入直後の過去分一括送信を防ぐ）
+        enabled_at_by_guild = {
+            guild_id: datetime.datetime.strptime(
+                self.store.ensure_result_enabled_at(guild_id, now_str),
+                "%Y-%m-%d %H:%M:%S",
+            )
+            for guild_id in self.results_config.keys()
+        }
+        for contest in self._current_contests():
             end_time = datetime.datetime.strptime(
                 contest["end_time"], "%Y-%m-%d %H:%M:%S"
             )
-            if end_time <= now and not contest.get("result_sent", False):
-                if not self.results_config:
-                    contest["result_sent"] = True
-                    print(f"{contest['name']} のコンテスト結果送信先が未設定のため、スキップしました。")
+            if end_time > now:
+                continue
+            # 送信済み判定はサーバーごとに行う。未送信のサーバーにだけ送る
+            key = contest_key(contest)
+            for guild_id, enabled_at in enabled_at_by_guild.items():
+                if end_time <= enabled_at:
+                    continue
+                if self.store.is_delivered(KIND_RESULT_SENT, key, guild_id):
+                    continue
+                failure_key = (key, str(guild_id))
+                if self._result_send_failures.get(failure_key, 0) >= 10:
+                    continue
+                if await self.send_contest_result(contest, guild_id):
+                    self._result_send_failures.pop(failure_key, None)
+                    self.store.mark_delivered(KIND_RESULT_SENT, key, guild_id)
+                    print(
+                        f"{contest['name']} のコンテスト結果をサーバー {guild_id} に送信しました。"
+                    )
                 else:
-                    guild_ids = self.results_config.keys()
-                    sent_to_any_guild = False
-                    for guild_id in guild_ids:
-                        if await self.send_contest_result(contest, guild_id):
-                            sent_to_any_guild = True
-                    if sent_to_any_guild:
-                        contest["result_sent"] = True
-                        print(f"{contest['name']} のコンテスト結果の自動送信処理完了。")
-                    else:
-                        print(f"{contest['name']} のコンテスト結果の自動送信に失敗。")
-                        self.retry_count += 1  # リトライカウントを増加
-                        if self.retry_count >= 10:
-                            print("リトライ回数が10回に達しました。自動送信を中止します。")
-                            break  # リトライ回数が10回に達したらループを抜ける
-            updated_contests.append(contest)
-        if updated_contests != self.contests:
-            self.contests = updated_contests
-            self.save_contests(self.contests)
+                    failures = self._result_send_failures.get(failure_key, 0) + 1
+                    self._result_send_failures[failure_key] = failures
+                    print(
+                        f"{contest['name']} のコンテスト結果の自動送信に失敗しました"
+                        f" (サーバー {guild_id}、{failures}回目)。"
+                    )
+                    if failures >= 10:
+                        print(
+                            f"{contest['name']} のサーバー {guild_id} への自動送信を中止します。"
+                        )
 
     @check_contest_end.before_loop
     async def before_check_contest_end(self):
@@ -624,6 +666,9 @@ class Contest_result(commands.Cog):
 
 
 class ResultChannelSelectView(discord.ui.View):  # ChannelSelect 用の View を作成
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Contest_result, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog

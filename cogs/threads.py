@@ -9,6 +9,16 @@ from discord.ext import commands, tasks
 from discord.ui import Button, ChannelSelect, Select, View
 
 from .contest_data import ContestData  # ContestData Cog をインポート
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
+from cogs.delivery_state import (
+    KIND_THREADS_CREATED,
+    contest_key,
+    get_shared_store,
+)
+from cogs.time_utils import now_jst_naive
 
 THREADS_FILE = "asset/threads.yaml"
 CONTEST_TYPES = ["ABC", "ARC", "AGC", "AHC"]
@@ -19,6 +29,7 @@ class Threads(commands.Cog):
         self.bot = bot
         self.check_contests_and_create_threads.start()
         self.threads_config = self.load_threads_config()
+        self.store = get_shared_store()
 
     def load_threads_config(self):
         """スレッド設定をYAMLファイルから読み込む"""
@@ -42,7 +53,7 @@ class Threads(commands.Cog):
     @tasks.loop(minutes=1)
     async def check_contests_and_create_threads(self):
         """コンテストをチェックし、スレッドを作成する"""
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         contest_data_cog = self.bot.get_cog("ContestData")  # ContestData Cogを取得
         if not contest_data_cog:
             print("Error: ContestData cog not found!")
@@ -62,8 +73,11 @@ class Threads(commands.Cog):
                 continue
 
             for contest in contests:
-                # スレッド作成済みならスキップ
-                if contest.get("threads_created"):
+                # このサーバーでスレッド作成済みならスキップ（サーバーごとに記録）
+                key = contest_key(contest)
+                if self.store.is_delivered(
+                    KIND_THREADS_CREATED, key, guild_id_str
+                ):
                     continue
 
                 start_time = datetime.datetime.strptime(
@@ -109,11 +123,10 @@ class Threads(commands.Cog):
                         )
                         print(f"スレッド {contest['name']} を作成しました")
 
-                        # スレッド作成済みフラグを立てる
-                        contest["threads_created"] = True
-                        contest_data_cog.save_contests(
-                            contests
-                        )  # ContestData Cog の save_contests を呼び出す
+                        # このサーバーでは作成済みとして記録する
+                        self.store.mark_delivered(
+                            KIND_THREADS_CREATED, key, guild_id_str
+                        )
 
                     except discord.Forbidden:
                         print(
@@ -192,6 +205,7 @@ class Threads(commands.Cog):
     @app_commands.command(
         name="thread---set_channel", description="スレッドを作成するチャンネルを設定"
     )
+    @can_manage_bot_settings()
     async def set_thread_channel(self, interaction: discord.Interaction):
         """スレッド作成チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -211,6 +225,7 @@ class Threads(commands.Cog):
         name="thread---set_contest_type",
         description="コンテストタイプごとのスレッド作成をON/OFF",
     )
+    @can_manage_bot_settings()
     async def set_thread_type(self, interaction: discord.Interaction):
         """コンテストタイプごとのスレッド作成ON/OFF設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -230,6 +245,9 @@ class Threads(commands.Cog):
 
 
 class ChannelSelectView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Threads, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -260,6 +278,9 @@ class ChannelSelectView(View):
 
 
 class ContestTypeThreadsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     """コンテストタイプごとのスレッド作成ON/OFF設定View"""
 
     def __init__(self, cog: Threads, guild_id: str):

@@ -15,13 +15,14 @@ from discord.ext import commands, tasks
 from PIL import Image, ImageDraw, ImageFont
 
 import calculate_hash
-from cogs.permission_checks import can_manage_school_settings
+from cogs.permission_checks import can_manage_bot_settings
 from cogs.school_settings import (
     DEFAULT_SCHOOL_NAME,
     DEFAULT_SCHOOL_TYPE,
+    SCHOOL_NOT_SET_MESSAGE,
     format_school_label,
-    get_school_name_for_guild,
-    get_school_type_for_guild,
+    get_school_for_guild,
+    infer_school_type,
     iter_guild_settings,
     normalize_school_type,
     set_channel_id_for_guild,
@@ -339,6 +340,68 @@ def find_matching_schools(
                     partial_matches.append(school_key)
 
     return exact_matches or partial_matches
+
+
+_school_list_cache: dict[str, Any] = {"expires": 0.0, "schools": []}
+
+
+def collect_school_names(
+    tables_by_type: dict[str, tuple[dict[str, pd.DataFrame], dict[str, bool]]],
+) -> list[tuple[str, str]]:
+    """AJLの表から (学校名, 学校種別) の一意な一覧を作る。"""
+    schools: list[tuple[str, str]] = []
+    seen = set()
+    for school_type in SCHOOL_TYPES:
+        frames, _ = tables_by_type.get(school_type, ({}, {}))
+        for df in frames.values():
+            if "学校名" not in df.columns:
+                continue
+            for raw_school_name in df["学校名"].dropna().unique():
+                school_name = str(raw_school_name).strip()
+                key = (school_name, school_type)
+                if school_name and key not in seen:
+                    seen.add(key)
+                    schools.append(key)
+    return sorted(schools)
+
+
+def load_all_school_names() -> list[tuple[str, str]]:
+    """AJL全校の一覧を返す（1時間キャッシュ。取得失敗時は前回値か空）。"""
+    now = time.time()
+    if _school_list_cache["schools"] and now < _school_list_cache["expires"]:
+        return _school_list_cache["schools"]
+    try:
+        tables_by_type = {
+            school_type: fetch_school_rank_tables(school_type)
+            for school_type in SCHOOL_TYPES
+        }
+        schools = collect_school_names(tables_by_type)
+    except Exception as e:
+        print(f"学校一覧の取得に失敗しました: {e}")
+        return _school_list_cache["schools"]
+    if schools:
+        _school_list_cache["schools"] = schools
+        _school_list_cache["expires"] = now + 3600
+    return schools
+
+
+def filter_school_choices(
+    schools: list[tuple[str, str]], current: str, limit: int = 25
+) -> list[tuple[str, str]]:
+    """入力中の文字列で学校候補を絞り込む（略称でも検索できる）。"""
+    query = (current or "").strip()
+    if not query:
+        return schools[:limit]
+    query_lower = query.lower()
+    matched = []
+    for school_name, school_type in schools:
+        if any(
+            query_lower in text.lower() for text in school_search_texts(school_name)
+        ):
+            matched.append((school_name, school_type))
+            if len(matched) >= limit:
+                break
+    return matched
 
 
 def school_image_filename(school_name: str, school_type: str, contest_type: str) -> str:
@@ -1291,6 +1354,18 @@ class SchoolRank(commands.Cog):
             print(f"An unexpected error occurred: {e}")
             await interaction.followup.send("予期せぬエラーが発生しました。")
 
+    async def school_name_autocomplete(
+        self, interaction: discord.Interaction, current: str
+    ) -> list[app_commands.Choice[str]]:
+        schools = load_all_school_names()
+        return [
+            app_commands.Choice(
+                name=format_school_label(school_name, school_type),
+                value=school_name,
+            )
+            for school_name, school_type in filter_school_choices(schools, current)
+        ]
+
     @app_commands.command(name="school_set", description="このサーバーの学校名を設定します。")
     @app_commands.choices(
         school_type=[
@@ -1298,7 +1373,8 @@ class SchoolRank(commands.Cog):
             app_commands.Choice(name="高校", value="high"),
         ]
     )
-    @can_manage_school_settings()
+    @app_commands.autocomplete(school_name=school_name_autocomplete)
+    @can_manage_bot_settings()
     async def school_set(
         self,
         interaction: discord.Interaction,
@@ -1309,7 +1385,8 @@ class SchoolRank(commands.Cog):
             await interaction.response.send_message("このコマンドはサーバー内で実行してください。")
             return
 
-        school_type = normalize_school_type(school_type)
+        # 学校名の末尾（〜高等学校／〜中学校）から種別が分かる場合はそちらを優先する
+        school_type = infer_school_type(school_name, school_type)
         set_school_for_guild(interaction.guild_id, school_name, school_type)
         embed = discord.Embed(
             title="設定完了",
@@ -1323,9 +1400,9 @@ class SchoolRank(commands.Cog):
 
     @app_commands.command(
         name="school_unset",
-        description="このサーバーの学校名設定を削除し、デフォルトに戻します。",
+        description="このサーバーの学校名設定を削除します（未設定になります）。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_unset(self, interaction: discord.Interaction):
         if interaction.guild_id is None:
             await interaction.response.send_message("このコマンドはサーバー内で実行してください。")
@@ -1335,9 +1412,8 @@ class SchoolRank(commands.Cog):
         embed = discord.Embed(
             title="設定解除",
             description=(
-                "このサーバーの学校設定を削除しました。"
-                f"デフォルトは "
-                f"{format_school_label(DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE)}です。"
+                "このサーバーの学校設定を削除しました（未設定になりました）。"
+                "学校順位などを使うには /setup または /school_set で学校を設定してください。"
             ),
             color=discord.Color.green(),
         )
@@ -1359,11 +1435,14 @@ class SchoolRank(commands.Cog):
             await self.search_and_send_school_rank(interaction, school_name.strip())
             return
 
-        await self.send_school_rank(
-            interaction,
-            get_school_name_for_guild(interaction.guild_id),
-            get_school_type_for_guild(interaction.guild_id),
-        )
+        school = get_school_for_guild(interaction.guild_id)
+        if school is None:
+            await interaction.response.send_message(
+                SCHOOL_NOT_SET_MESSAGE, ephemeral=True
+            )
+            return
+
+        await self.send_school_rank(interaction, school[0], school[1])
 
     @app_commands.command(
         name="tsukuba_rank",
@@ -1382,14 +1461,10 @@ class SchoolRank(commands.Cog):
                 channel_id = guild_settings.get("school_rank_channel_id") or guild_settings.get(
                     "tsukuba_rank_channel_id"
                 )
-                if channel_id:
+                school = get_school_for_guild(guild_id)
+                if channel_id and school is not None:
                     target_guilds.append(
-                        (
-                            guild_id,
-                            str(channel_id),
-                            get_school_name_for_guild(guild_id),
-                            get_school_type_for_guild(guild_id),
-                        )
+                        (guild_id, str(channel_id), school[0], school[1])
                     )
 
             tables_by_type = {}
@@ -1462,7 +1537,7 @@ class SchoolRank(commands.Cog):
         name="school_rank_set_ch",
         description="学校順位通知チャンネルを設定します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_rank_set_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
@@ -1473,14 +1548,20 @@ class SchoolRank(commands.Cog):
         set_channel_id_for_guild(
             interaction.guild_id, "school_rank_channel_id", channel.id
         )
-        school_name = get_school_name_for_guild(interaction.guild_id)
-        school_type = get_school_type_for_guild(interaction.guild_id)
+        school = get_school_for_guild(interaction.guild_id)
+        if school is None:
+            description = (
+                f"順位通知チャンネルを {channel.mention} に設定しました。"
+                "学校が未設定のため、/setup または /school_set で学校を設定するまで通知は行われません。"
+            )
+        else:
+            description = (
+                f"{format_school_label(school[0], school[1])}"
+                f"の順位通知チャンネルを {channel.mention} に設定しました。"
+            )
         embed = discord.Embed(
             title="設定完了",
-            description=(
-                f"{format_school_label(school_name, school_type)}"
-                f"の順位通知チャンネルを {channel.mention} に設定しました。"
-            ),
+            description=description,
             color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed)
@@ -1489,7 +1570,7 @@ class SchoolRank(commands.Cog):
         name="school_rank_unset_ch",
         description="学校順位通知チャンネルを解除します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_rank_unset_channel(self, interaction: discord.Interaction):
         if interaction.guild_id is None:
             await interaction.response.send_message("このコマンドはサーバー内で実行してください。")
@@ -1514,7 +1595,7 @@ class SchoolRank(commands.Cog):
         name="tsukuba_rank---set_ch",
         description="筑波大学附属中学校の順位通知チャンネルを設定します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def tsukuba_rank_set_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
@@ -1524,7 +1605,7 @@ class SchoolRank(commands.Cog):
         name="tsukuba_rank---unset_ch",
         description="筑波大学附属中学校の順位通知チャンネルを解除します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def tsukuba_rank_unset_channel(self, interaction: discord.Interaction):
         await self.school_rank_unset_channel.callback(self, interaction)
 

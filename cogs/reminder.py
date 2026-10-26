@@ -1,6 +1,5 @@
 import datetime
 import os
-import time
 import traceback
 from typing import Dict, List
 
@@ -10,6 +9,11 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from discord.ui import Button, ChannelSelect, Select, View
 
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
+from cogs.time_utils import jst_timestamp, now_jst_naive
 from env.config import Config
 
 
@@ -91,7 +95,7 @@ class Reminder(commands.Cog):
             print("Error: ContestData cog not found or no contests loaded for 'check_no_abc_notification'.")
             return
 
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         today_date = now.date()
 
         if self.last_checked_date_no_abc == today_date:
@@ -257,12 +261,13 @@ class Reminder(commands.Cog):
         )
         end_time = datetime.datetime.strptime(contest["end_time"], "%Y-%m-%d %H:%M:%S")
 
-        # タイムスタンプ形式に変換 (絶対表示用)
-        start_timestamp = int(time.mktime(start_time.timetuple()))
-        end_timestamp = int(time.mktime(end_time.timetuple()))
+        # タイムスタンプ形式に変換 (絶対表示用)。JSTとして解釈し、
+        # 実行環境のタイムゾーンに依存しないよう jst_timestamp を使う
+        start_timestamp = jst_timestamp(start_time)
+        end_timestamp = jst_timestamp(end_time)
 
         # 相対時間表示用のタイムスタンプ (例: ○分後)
-        relative_start_timestamp = int(time.mktime(start_time.timetuple()))
+        relative_start_timestamp = start_timestamp
 
         a_problem_url = self.get_a_problem_url(contest["url"])
 
@@ -316,7 +321,7 @@ class Reminder(commands.Cog):
     @tasks.loop(minutes=0.5)
     async def check_reminders(self):
         """設定された時間に基づいてリマインダーを送信する"""
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         contest_data_cog = self.bot.get_cog("ContestData")  # ContestData Cogを取得
         if not contest_data_cog:
             print("Error: ContestData cog not found!")
@@ -356,6 +361,7 @@ class Reminder(commands.Cog):
         await self.bot.wait_until_ready()
 
     @app_commands.command(name="reminder---set", description="リマインダー設定")
+    @can_manage_bot_settings()
     async def set_reminder(self, interaction: discord.Interaction):
         """リマインダー設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -376,6 +382,7 @@ class Reminder(commands.Cog):
         name="reminder---set_channel",
         description="リマインダーを送信するチャンネルを設定",
     )
+    @can_manage_bot_settings()
     async def set_reminder_channel(self, interaction: discord.Interaction):
         """リマインダー送信チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -455,6 +462,9 @@ class Reminder(commands.Cog):
 
 
 class ReminderSettingsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -496,6 +506,9 @@ class ReminderSettingsView(View):
 
 
 class ContestTypeSettingsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str, contest_type: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -691,6 +704,10 @@ class CustomTimeModal(discord.ui.Modal, title="カスタム通知時間設定"):
         self.guild_id = guild_id
         self.contest_type = contest_type
 
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # 開いた後に副管理者ロールを剥奪された場合など、送信時にも再検査する
+        return await ensure_can_manage_bot_settings(interaction)
+
     async def on_submit(self, interaction: discord.Interaction):
         """モーダルが送信されたときのコールバック"""
         try:
@@ -749,6 +766,9 @@ class CustomTimeModal(discord.ui.Modal, title="カスタム通知時間設定"):
 
 
 class ChannelSelectView(View):  # ChannelSelect 用の View を作成
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog

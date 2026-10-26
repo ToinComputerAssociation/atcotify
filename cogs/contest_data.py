@@ -122,7 +122,8 @@ class ContestData(commands.Cog):
                             "type": contest_type,
                             "url": item.get("url", ""),
                             "rated_range": item.get("rated_range", ""),
-                            "threads_created": False,
+                            # 配信済み状態は cogs.delivery_state が別に保持する。
+                            # ここにフラグを持たせると、24時間ごとの更新で初期化されてしまう。
                         }
                     )
                 except Exception as e:

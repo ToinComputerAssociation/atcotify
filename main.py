@@ -14,13 +14,17 @@ INITIAL_EXTENSIONS = [
     "cogs.perf_score",
     "cogs.threads",
     "cogs.contest_data",
-    "cogs.affiliated_police",
+    "cogs.admin_roles",
+    "cogs.setup",
 ]
 
 config = Config()
 
 TOKEN = config.token
 
+# Intents は従来どおり全て有効にする（jishaku が MESSAGE CONTENT を
+# 必要とするため、当面は削減しない）。100サーバー規模になったら
+# 特権 Intents の要否を再検討する。
 intents = discord.Intents.all()
 activity = discord.Activity(name="起動中", type=discord.ActivityType.playing)
 
@@ -92,13 +96,16 @@ async def on_error(interaction, error):
             await interaction.response.send_message(message, ephemeral=True)
         return
 
-    await discord.app_commands.CommandTree.on_error(bot.tree, interaction, error)
-    err = "".join(traceback.format_exception(error))
-    embed = discord.Embed(description=f"```py\n{err}\n```"[:4095])
+    # 詳細（トレースバック）は運用ログにのみ出し、利用者には簡潔に伝える
+    print("".join(traceback.format_exception(error)))
+    message = (
+        "エラーが発生しました。しばらくしてからもう一度お試しください。"
+        "解決しない場合はBotの管理者にお知らせください。"
+    )
     if interaction.response.is_done():
-        await interaction.channel.send("An error has occurred.", embed=embed)
+        await interaction.followup.send(message, ephemeral=True)
     else:
-        await interaction.response.send_message("An error has occurred.", embed=embed)
+        await interaction.response.send_message(message, ephemeral=True)
 
 
 bot.run(token=TOKEN)
