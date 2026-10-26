@@ -1,6 +1,5 @@
 import datetime
 import os
-import time
 import traceback
 from typing import Dict, List
 
@@ -14,7 +13,7 @@ from cogs.permission_checks import (
     can_manage_bot_settings,
     ensure_can_manage_bot_settings,
 )
-from cogs.time_utils import now_jst_naive
+from cogs.time_utils import jst_timestamp, now_jst_naive
 from env.config import Config
 
 
@@ -262,12 +261,13 @@ class Reminder(commands.Cog):
         )
         end_time = datetime.datetime.strptime(contest["end_time"], "%Y-%m-%d %H:%M:%S")
 
-        # タイムスタンプ形式に変換 (絶対表示用)
-        start_timestamp = int(time.mktime(start_time.timetuple()))
-        end_timestamp = int(time.mktime(end_time.timetuple()))
+        # タイムスタンプ形式に変換 (絶対表示用)。JSTとして解釈し、
+        # 実行環境のタイムゾーンに依存しないよう jst_timestamp を使う
+        start_timestamp = jst_timestamp(start_time)
+        end_timestamp = jst_timestamp(end_time)
 
         # 相対時間表示用のタイムスタンプ (例: ○分後)
-        relative_start_timestamp = int(time.mktime(start_time.timetuple()))
+        relative_start_timestamp = start_timestamp
 
         a_problem_url = self.get_a_problem_url(contest["url"])
 

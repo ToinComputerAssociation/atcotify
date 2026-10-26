@@ -6,6 +6,7 @@ import pytest
 
 from cogs import delivery_state as ds
 from cogs.result import Contest_result
+from cogs.time_utils import now_jst_naive
 
 FMT = "%Y-%m-%d %H:%M:%S"
 
@@ -53,7 +54,7 @@ def set_baseline_in_past(store, guild_id="111"):
 
 
 def test_fresh_guild_does_not_receive_past_contests(harness):
-    now = datetime.datetime.now()
+    now = now_jst_naive()
     past = make_contest(
         "ABC Past", now - datetime.timedelta(days=30), "https://atcoder.jp/contests/abc_past"
     )
@@ -67,7 +68,7 @@ def test_fresh_guild_does_not_receive_past_contests(harness):
 
 def test_contest_ending_after_baseline_is_sent_once(harness):
     set_baseline_in_past(harness.store)
-    now = datetime.datetime.now()
+    now = now_jst_naive()
     ended = make_contest(
         "ABC Ended", now - datetime.timedelta(hours=1), "https://atcoder.jp/contests/abc_ended"
     )
@@ -84,7 +85,7 @@ def test_contest_ending_after_baseline_is_sent_once(harness):
 
 def test_new_contests_from_refresh_are_picked_up(harness):
     set_baseline_in_past(harness.store)
-    now = datetime.datetime.now()
+    now = now_jst_naive()
     first = make_contest(
         "ABC First", now - datetime.timedelta(hours=2), "https://atcoder.jp/contests/abc_first"
     )

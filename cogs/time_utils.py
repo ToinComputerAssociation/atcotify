@@ -13,3 +13,12 @@ JST = datetime.timezone(datetime.timedelta(hours=9), name="JST")
 def now_jst_naive() -> datetime.datetime:
     """現在のJST壁時計を tz なし datetime で返す。"""
     return datetime.datetime.now(JST).replace(tzinfo=None)
+
+
+def jst_timestamp(value: datetime.datetime) -> int:
+    """JSTの壁時計（tzなし）を Unix タイムスタンプに変換する。
+
+    time.mktime() は実行環境のローカルタイムゾーンに依存するため使わない。
+    Discord の <t:...> 表示などに使う。
+    """
+    return int(value.replace(tzinfo=JST).timestamp())
