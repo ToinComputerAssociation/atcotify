@@ -10,6 +10,10 @@ from discord import app_commands
 from discord.ext import commands, tasks
 from discord.ui import Button, ChannelSelect, Select, View
 
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
 from env.config import Config
 
 
@@ -356,6 +360,7 @@ class Reminder(commands.Cog):
         await self.bot.wait_until_ready()
 
     @app_commands.command(name="reminder---set", description="リマインダー設定")
+    @can_manage_bot_settings()
     async def set_reminder(self, interaction: discord.Interaction):
         """リマインダー設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -376,6 +381,7 @@ class Reminder(commands.Cog):
         name="reminder---set_channel",
         description="リマインダーを送信するチャンネルを設定",
     )
+    @can_manage_bot_settings()
     async def set_reminder_channel(self, interaction: discord.Interaction):
         """リマインダー送信チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -455,6 +461,9 @@ class Reminder(commands.Cog):
 
 
 class ReminderSettingsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -496,6 +505,9 @@ class ReminderSettingsView(View):
 
 
 class ContestTypeSettingsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str, contest_type: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -749,6 +761,9 @@ class CustomTimeModal(discord.ui.Modal, title="カスタム通知時間設定"):
 
 
 class ChannelSelectView(View):  # ChannelSelect 用の View を作成
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Reminder, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog

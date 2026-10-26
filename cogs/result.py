@@ -14,6 +14,11 @@ import requests
 import yaml
 from discord import app_commands
 from discord.ext import commands, tasks
+
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
 from google.oauth2.service_account import Credentials
 from pdf2image import convert_from_path
 from pdf2image.exceptions import (
@@ -577,6 +582,7 @@ class Contest_result(commands.Cog):
         name="result---set_channel",
         description="コンテスト結果を送信するチャンネルを設定",
     )
+    @can_manage_bot_settings()
     async def set_result_channel(self, interaction: discord.Interaction):
         """リマインダー送信チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -624,6 +630,9 @@ class Contest_result(commands.Cog):
 
 
 class ResultChannelSelectView(discord.ui.View):  # ChannelSelect 用の View を作成
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Contest_result, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog

@@ -14,7 +14,7 @@ INITIAL_EXTENSIONS = [
     "cogs.perf_score",
     "cogs.threads",
     "cogs.contest_data",
-    "cogs.affiliated_police",
+    "cogs.admin_roles",
 ]
 
 config = Config()

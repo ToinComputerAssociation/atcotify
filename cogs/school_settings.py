@@ -169,6 +169,37 @@ def unset_channel_id_for_guild(
     return removed
 
 
+def get_admin_role_id_for_guild(guild_id: int | str) -> int | None:
+    raw_role_id = get_guild_settings(guild_id).get("admin_role_id")
+    if raw_role_id is None:
+        return None
+    try:
+        return int(raw_role_id)
+    except (TypeError, ValueError):
+        return None
+
+
+def set_admin_role_id_for_guild(guild_id: int | str, role_id: int | str) -> None:
+    settings = load_bot_settings()
+    guild_key = str(guild_id)
+    settings.setdefault(guild_key, {})
+    settings[guild_key]["admin_role_id"] = str(role_id)
+    save_bot_settings(settings)
+
+
+def unset_admin_role_id_for_guild(guild_id: int | str) -> bool:
+    settings = load_bot_settings()
+    guild_key = str(guild_id)
+    if guild_key not in settings:
+        return False
+
+    removed = settings[guild_key].pop("admin_role_id", None) is not None
+    if not settings[guild_key]:
+        del settings[guild_key]
+    save_bot_settings(settings)
+    return removed
+
+
 def iter_guild_settings() -> list[tuple[str, dict[str, Any]]]:
     return [
         (str(guild_id), guild_settings)

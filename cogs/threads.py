@@ -9,6 +9,10 @@ from discord.ext import commands, tasks
 from discord.ui import Button, ChannelSelect, Select, View
 
 from .contest_data import ContestData  # ContestData Cog をインポート
+from cogs.permission_checks import (
+    can_manage_bot_settings,
+    ensure_can_manage_bot_settings,
+)
 
 THREADS_FILE = "asset/threads.yaml"
 CONTEST_TYPES = ["ABC", "ARC", "AGC", "AHC"]
@@ -192,6 +196,7 @@ class Threads(commands.Cog):
     @app_commands.command(
         name="thread---set_channel", description="スレッドを作成するチャンネルを設定"
     )
+    @can_manage_bot_settings()
     async def set_thread_channel(self, interaction: discord.Interaction):
         """スレッド作成チャンネル設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -211,6 +216,7 @@ class Threads(commands.Cog):
         name="thread---set_contest_type",
         description="コンテストタイプごとのスレッド作成をON/OFF",
     )
+    @can_manage_bot_settings()
     async def set_thread_type(self, interaction: discord.Interaction):
         """コンテストタイプごとのスレッド作成ON/OFF設定コマンド"""
         guild_id = str(interaction.guild_id)
@@ -230,6 +236,9 @@ class Threads(commands.Cog):
 
 
 class ChannelSelectView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     def __init__(self, cog: Threads, guild_id: str):
         super().__init__(timeout=None)
         self.cog = cog
@@ -260,6 +269,9 @@ class ChannelSelectView(View):
 
 
 class ContestTypeThreadsView(View):
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        return await ensure_can_manage_bot_settings(interaction)
+
     """コンテストタイプごとのスレッド作成ON/OFF設定View"""
 
     def __init__(self, cog: Threads, guild_id: str):

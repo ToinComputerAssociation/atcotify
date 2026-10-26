@@ -87,6 +87,11 @@ class Help(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="`/admin_role_set role` / `/admin_role_unset` / `/admin_role_show`",
+            value="副管理者ロールを設定・解除・確認します。設定と解除はサーバー管理者のみ、確認は管理者と副管理者が実行できます。副管理者はBotの設定を変更できます。",
+            inline=False,
+        )
+        embed.add_field(
             name="筑波用の旧コマンド",
             value="`/tsukuba_rank`、`/tsukuba_student_rank`、`/tsukuba_rank---set_ch`、`/tsukuba_rank---unset_ch`、`/tsukuba_student_rank---set_ch`、`/tsukuba_student_rank---unset_ch` は互換用に残っています。",
             inline=False,

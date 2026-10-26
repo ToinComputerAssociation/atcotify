@@ -15,7 +15,7 @@ from discord.ext import commands, tasks
 from PIL import Image, ImageDraw, ImageFont
 
 import calculate_hash
-from cogs.permission_checks import can_manage_school_settings
+from cogs.permission_checks import can_manage_bot_settings
 from cogs.school_settings import (
     DEFAULT_SCHOOL_NAME,
     DEFAULT_SCHOOL_TYPE,
@@ -1298,7 +1298,7 @@ class SchoolRank(commands.Cog):
             app_commands.Choice(name="高校", value="high"),
         ]
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_set(
         self,
         interaction: discord.Interaction,
@@ -1325,7 +1325,7 @@ class SchoolRank(commands.Cog):
         name="school_unset",
         description="このサーバーの学校名設定を削除し、デフォルトに戻します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_unset(self, interaction: discord.Interaction):
         if interaction.guild_id is None:
             await interaction.response.send_message("このコマンドはサーバー内で実行してください。")
@@ -1462,7 +1462,7 @@ class SchoolRank(commands.Cog):
         name="school_rank_set_ch",
         description="学校順位通知チャンネルを設定します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_rank_set_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
@@ -1489,7 +1489,7 @@ class SchoolRank(commands.Cog):
         name="school_rank_unset_ch",
         description="学校順位通知チャンネルを解除します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def school_rank_unset_channel(self, interaction: discord.Interaction):
         if interaction.guild_id is None:
             await interaction.response.send_message("このコマンドはサーバー内で実行してください。")
@@ -1514,7 +1514,7 @@ class SchoolRank(commands.Cog):
         name="tsukuba_rank---set_ch",
         description="筑波大学附属中学校の順位通知チャンネルを設定します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def tsukuba_rank_set_channel(
         self, interaction: discord.Interaction, channel: discord.TextChannel
     ):
@@ -1524,7 +1524,7 @@ class SchoolRank(commands.Cog):
         name="tsukuba_rank---unset_ch",
         description="筑波大学附属中学校の順位通知チャンネルを解除します。",
     )
-    @can_manage_school_settings()
+    @can_manage_bot_settings()
     async def tsukuba_rank_unset_channel(self, interaction: discord.Interaction):
         await self.school_rank_unset_channel.callback(self, interaction)
 
