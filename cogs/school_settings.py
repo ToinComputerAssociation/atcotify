@@ -4,8 +4,16 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
+# 旧デフォルト校。/tsukuba_rank など筑波専用コマンドが明示的に使うだけで、
+# サーバー設定の未設定時のフォールバックには使わない（未設定は None を返す）。
 DEFAULT_SCHOOL_NAME = "筑波大学附属中学校"
 DEFAULT_SCHOOL_TYPE = "junior_high"
+
+SCHOOL_NOT_SET_MESSAGE = (
+    "このサーバーには学校が設定されていません。"
+    "学校名を指定して実行するか、Botの設定ができる人に "
+    "/setup または /school_set で学校を設定してもらってください。"
+)
 SCHOOL_TYPE_LABELS = {
     "junior_high": "中学",
     "high": "高校",
@@ -59,14 +67,15 @@ def get_guild_settings(guild_id: int | str) -> dict[str, Any]:
     return {}
 
 
-def get_school_name_for_guild(guild_id: int | str | None) -> str:
+def get_school_name_for_guild(guild_id: int | str | None) -> str | None:
+    """サーバーに設定された学校名。未設定なら None（デフォルト校は無い）。"""
     if guild_id is None:
-        return DEFAULT_SCHOOL_NAME
+        return None
 
     school_name = get_guild_settings(guild_id).get("school_name")
     if isinstance(school_name, str) and school_name.strip():
         return school_name.strip()
-    return DEFAULT_SCHOOL_NAME
+    return None
 
 
 def normalize_school_type(school_type: str | None) -> str:
@@ -83,14 +92,36 @@ def format_school_label(school_name: str, school_type: str | None) -> str:
     return f"{school_name}（{SCHOOL_TYPE_LABELS[school_type]}）"
 
 
-def get_school_type_for_guild(guild_id: int | str | None) -> str:
-    if guild_id is None:
-        return DEFAULT_SCHOOL_TYPE
+def get_school_type_for_guild(guild_id: int | str | None) -> str | None:
+    """サーバーに設定された学校種別。学校自体が未設定なら None。"""
+    if get_school_name_for_guild(guild_id) is None:
+        return None
 
     school_type = get_guild_settings(guild_id).get("school_type")
     if isinstance(school_type, str):
         return normalize_school_type(school_type)
     return DEFAULT_SCHOOL_TYPE
+
+
+def get_school_for_guild(
+    guild_id: int | str | None,
+) -> tuple[str, str] | None:
+    """(学校名, 学校種別) を返す。学校が未設定なら None。"""
+    school_name = get_school_name_for_guild(guild_id)
+    if school_name is None:
+        return None
+    school_type = get_school_type_for_guild(guild_id)
+    return school_name, school_type or DEFAULT_SCHOOL_TYPE
+
+
+def infer_school_type(school_name: str, fallback: str | None = None) -> str:
+    """学校名の末尾から種別を推定する（推定できない場合は fallback）。"""
+    name = school_name.strip()
+    if name.endswith(SCHOOL_TYPE_NAME_SUFFIXES["high"]):
+        return "high"
+    if name.endswith(SCHOOL_TYPE_NAME_SUFFIXES["junior_high"]):
+        return "junior_high"
+    return normalize_school_type(fallback)
 
 
 def set_school_name_for_guild(guild_id: int | str, school_name: str) -> None:

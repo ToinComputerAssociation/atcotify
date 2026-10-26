@@ -14,9 +14,9 @@ from cogs.permission_checks import can_manage_bot_settings
 from cogs.school_settings import (
     DEFAULT_SCHOOL_NAME,
     DEFAULT_SCHOOL_TYPE,
+    SCHOOL_NOT_SET_MESSAGE,
     format_school_label,
-    get_school_name_for_guild,
-    get_school_type_for_guild,
+    get_school_for_guild,
     iter_guild_settings,
     normalize_school_type,
     set_channel_id_for_guild,
@@ -525,11 +525,14 @@ class SchoolStudentRank(commands.Cog):
             )
             return
 
-        await self.send_school_student_rank(
-            interaction,
-            get_school_name_for_guild(interaction.guild_id),
-            get_school_type_for_guild(interaction.guild_id),
-        )
+        school = get_school_for_guild(interaction.guild_id)
+        if school is None:
+            await interaction.response.send_message(
+                SCHOOL_NOT_SET_MESSAGE, ephemeral=True
+            )
+            return
+
+        await self.send_school_student_rank(interaction, school[0], school[1])
 
     @app_commands.command(
         name="tsukuba_student_rank",
@@ -550,14 +553,10 @@ class SchoolStudentRank(commands.Cog):
                 channel_id = guild_settings.get(
                     "school_student_rank_channel_id"
                 ) or guild_settings.get("tsukuba_student_rank_channel_id")
-                if channel_id:
+                school = get_school_for_guild(guild_id)
+                if channel_id and school is not None:
                     target_guilds.append(
-                        (
-                            guild_id,
-                            str(channel_id),
-                            get_school_name_for_guild(guild_id),
-                            get_school_type_for_guild(guild_id),
-                        )
+                        (guild_id, str(channel_id), school[0], school[1])
                     )
 
             tables_by_type = {}
@@ -628,14 +627,20 @@ class SchoolStudentRank(commands.Cog):
         set_channel_id_for_guild(
             interaction.guild_id, "school_student_rank_channel_id", channel.id
         )
-        school_name = get_school_name_for_guild(interaction.guild_id)
-        school_type = get_school_type_for_guild(interaction.guild_id)
+        school = get_school_for_guild(interaction.guild_id)
+        if school is None:
+            description = (
+                f"生徒順位通知チャンネルを {channel.mention} に設定しました。"
+                "学校が未設定のため、/setup または /school_set で学校を設定するまで通知は行われません。"
+            )
+        else:
+            description = (
+                f"{format_school_label(school[0], school[1])}"
+                f"の生徒順位通知チャンネルを {channel.mention} に設定しました。"
+            )
         embed = discord.Embed(
             title="設定完了",
-            description=(
-                f"{format_school_label(school_name, school_type)}"
-                f"の生徒順位通知チャンネルを {channel.mention} に設定しました。"
-            ),
+            description=description,
             color=discord.Color.green(),
         )
         await interaction.response.send_message(embed=embed)

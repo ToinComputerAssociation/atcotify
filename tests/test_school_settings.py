@@ -14,15 +14,35 @@ def test_school_roundtrip():
     ss.set_school_for_guild(111, "開成高等学校", "high")
     assert ss.get_school_name_for_guild(111) == "開成高等学校"
     assert ss.get_school_type_for_guild(111) == "high"
-    # 別サーバーには影響しない
-    assert ss.get_school_name_for_guild(222) == ss.DEFAULT_SCHOOL_NAME
+    # 別サーバーには影響しない（未設定のサーバーは None）
+    assert ss.get_school_name_for_guild(222) is None
+    assert ss.get_school_for_guild(111) == ("開成高等学校", "high")
+    assert ss.get_school_for_guild(222) is None
 
 
 def test_unset_school():
     ss.set_school_for_guild(111, "開成高等学校", "high")
     ss.unset_school_name_for_guild(111)
-    assert ss.get_school_name_for_guild(111) == ss.DEFAULT_SCHOOL_NAME
+    # 未設定に戻る（デフォルト校には戻らない）
+    assert ss.get_school_name_for_guild(111) is None
+    assert ss.get_school_type_for_guild(111) is None
+    assert ss.get_school_for_guild(111) is None
     assert ss.load_bot_settings() == {}
+
+
+def test_school_unset_by_default():
+    assert ss.get_school_name_for_guild(111) is None
+    assert ss.get_school_type_for_guild(111) is None
+    assert ss.get_school_for_guild(None) is None
+
+
+def test_infer_school_type():
+    assert ss.infer_school_type("開成高等学校") == "high"
+    assert ss.infer_school_type("開成高校") == "high"
+    assert ss.infer_school_type("筑波大学附属中学校") == "junior_high"
+    # 末尾で判断できない場合は fallback（省略時は中学）
+    assert ss.infer_school_type("どこかの学校") == "junior_high"
+    assert ss.infer_school_type("どこかの学校", "high") == "high"
 
 
 def test_admin_role_roundtrip():
