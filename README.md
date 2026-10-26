@@ -43,7 +43,7 @@ uv run python main.py
 - `[GOOGLE]` 学校順位スプレッドシート連携用のサービスアカウントとスプレッドシート ID
 - `[YEAR]` 対象年度
 
-Intents は必要最小限（デフォルト）で動作し、MESSAGE CONTENT などの特権 Intents は使いません。
+Intents は全て有効にして動作します（運用ツール jishaku が MESSAGE CONTENT Intent を必要とするため）。大規模に公開する場合は、特権 Intents の扱いを再検討してください。
 
 ## 開発
 

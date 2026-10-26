@@ -22,11 +22,10 @@ config = Config()
 
 TOKEN = config.token
 
-# 必要最小限の Intents のみ使う。MESSAGE CONTENT などの特権 Intents は
-# 使わないため、Bot を多数のサーバーへ公開する場合でも申請が不要。
-# 注意: jishaku のプレフィックスコマンドは MESSAGE CONTENT が無いと
-# 動作しない（使う場合は Intents.message_content を有効化すること）。
-intents = discord.Intents.default()
+# Intents は従来どおり全て有効にする（jishaku が MESSAGE CONTENT を
+# 必要とするため、当面は削減しない）。100サーバー規模になったら
+# 特権 Intents の要否を再検討する。
+intents = discord.Intents.all()
 activity = discord.Activity(name="起動中", type=discord.ActivityType.playing)
 
 bot = commands.Bot(command_prefix="/", intents=intents, activity=activity)
