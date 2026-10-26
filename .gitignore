@@ -23,6 +23,8 @@ dist/
 wheels/
 *.egg-info
 *.lock
+# uv.lock は依存解決の正としてコミットする（Dependabot の uv ecosystem にも必要）
+!uv.lock
 
 # venv
 .venv

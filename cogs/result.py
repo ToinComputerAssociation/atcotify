@@ -19,6 +19,14 @@ from cogs.permission_checks import (
     can_manage_bot_settings,
     ensure_can_manage_bot_settings,
 )
+from cogs.delivery_state import (
+    KIND_RESULT_SENT,
+    contest_key,
+    is_delivered,
+    load_delivery_state,
+    mark_delivered,
+    save_delivery_state,
+)
 from google.oauth2.service_account import Credentials
 from pdf2image import convert_from_path
 from pdf2image.exceptions import (
@@ -48,7 +56,9 @@ class Contest_result(commands.Cog):
         self.results_config = self.load_results_config()
         self.contests = self.load_contests()
         self.check_contest_end.start()
-        self.retry_count = 0  # リトライカウントを初期化
+        self.delivery_state = load_delivery_state()
+        # (コンテストキー, サーバーID) ごとの送信失敗回数。10回でそのペアは打ち切る
+        self._result_send_failures: dict[tuple[str, str], int] = {}
 
     def load_results_config(self):
         """結果送信チャンネル設定をYAMLファイルから読み込む"""
@@ -595,34 +605,39 @@ class Contest_result(commands.Cog):
     async def check_contest_end(self):
         """コンテスト終了時刻をチェックし、結果を自動送信する"""
         now = datetime.datetime.now()
-        updated_contests = []
         for contest in self.contests:
             end_time = datetime.datetime.strptime(
                 contest["end_time"], "%Y-%m-%d %H:%M:%S"
             )
-            if end_time <= now and not contest.get("result_sent", False):
-                if not self.results_config:
-                    contest["result_sent"] = True
-                    print(f"{contest['name']} のコンテスト結果送信先が未設定のため、スキップしました。")
+            if end_time > now:
+                continue
+            # 送信済み判定はサーバーごとに行う。未送信のサーバーにだけ送る
+            key = contest_key(contest)
+            for guild_id in self.results_config.keys():
+                if is_delivered(self.delivery_state, KIND_RESULT_SENT, key, guild_id):
+                    continue
+                failure_key = (key, str(guild_id))
+                if self._result_send_failures.get(failure_key, 0) >= 10:
+                    continue
+                if await self.send_contest_result(contest, guild_id):
+                    mark_delivered(
+                        self.delivery_state, KIND_RESULT_SENT, key, guild_id
+                    )
+                    save_delivery_state(self.delivery_state)
+                    print(
+                        f"{contest['name']} のコンテスト結果をサーバー {guild_id} に送信しました。"
+                    )
                 else:
-                    guild_ids = self.results_config.keys()
-                    sent_to_any_guild = False
-                    for guild_id in guild_ids:
-                        if await self.send_contest_result(contest, guild_id):
-                            sent_to_any_guild = True
-                    if sent_to_any_guild:
-                        contest["result_sent"] = True
-                        print(f"{contest['name']} のコンテスト結果の自動送信処理完了。")
-                    else:
-                        print(f"{contest['name']} のコンテスト結果の自動送信に失敗。")
-                        self.retry_count += 1  # リトライカウントを増加
-                        if self.retry_count >= 10:
-                            print("リトライ回数が10回に達しました。自動送信を中止します。")
-                            break  # リトライ回数が10回に達したらループを抜ける
-            updated_contests.append(contest)
-        if updated_contests != self.contests:
-            self.contests = updated_contests
-            self.save_contests(self.contests)
+                    failures = self._result_send_failures.get(failure_key, 0) + 1
+                    self._result_send_failures[failure_key] = failures
+                    print(
+                        f"{contest['name']} のコンテスト結果の自動送信に失敗しました"
+                        f" (サーバー {guild_id}、{failures}回目)。"
+                    )
+                    if failures >= 10:
+                        print(
+                            f"{contest['name']} のサーバー {guild_id} への自動送信を中止します。"
+                        )
 
     @check_contest_end.before_loop
     async def before_check_contest_end(self):

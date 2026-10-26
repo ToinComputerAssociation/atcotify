@@ -13,6 +13,14 @@ from cogs.permission_checks import (
     can_manage_bot_settings,
     ensure_can_manage_bot_settings,
 )
+from cogs.delivery_state import (
+        KIND_THREADS_CREATED,
+    contest_key,
+    is_delivered,
+    load_delivery_state,
+    mark_delivered,
+    save_delivery_state,
+)
 
 THREADS_FILE = "asset/threads.yaml"
 CONTEST_TYPES = ["ABC", "ARC", "AGC", "AHC"]
@@ -23,6 +31,7 @@ class Threads(commands.Cog):
         self.bot = bot
         self.check_contests_and_create_threads.start()
         self.threads_config = self.load_threads_config()
+        self.delivery_state = load_delivery_state()
 
     def load_threads_config(self):
         """スレッド設定をYAMLファイルから読み込む"""
@@ -66,8 +75,11 @@ class Threads(commands.Cog):
                 continue
 
             for contest in contests:
-                # スレッド作成済みならスキップ
-                if contest.get("threads_created"):
+                # このサーバーでスレッド作成済みならスキップ（サーバーごとに記録）
+                key = contest_key(contest)
+                if is_delivered(
+                    self.delivery_state, KIND_THREADS_CREATED, key, guild_id_str
+                ):
                     continue
 
                 start_time = datetime.datetime.strptime(
@@ -113,11 +125,14 @@ class Threads(commands.Cog):
                         )
                         print(f"スレッド {contest['name']} を作成しました")
 
-                        # スレッド作成済みフラグを立てる
-                        contest["threads_created"] = True
-                        contest_data_cog.save_contests(
-                            contests
-                        )  # ContestData Cog の save_contests を呼び出す
+                        # このサーバーでは作成済みとして記録する
+                        mark_delivered(
+                            self.delivery_state,
+                            KIND_THREADS_CREATED,
+                            key,
+                            guild_id_str,
+                        )
+                        save_delivery_state(self.delivery_state)
 
                     except discord.Forbidden:
                         print(
