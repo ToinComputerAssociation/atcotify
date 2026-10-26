@@ -24,6 +24,7 @@ from cogs.delivery_state import (
     contest_key,
     get_shared_store,
 )
+from cogs.time_utils import now_jst_naive
 from google.oauth2.service_account import Credentials
 from pdf2image import convert_from_path
 from pdf2image.exceptions import (
@@ -529,7 +530,6 @@ class Contest_result(commands.Cog):
                             image_file = discord.File(f, filename=f"{contest_id}.png")
                         await channel.send(file=image_file)  # 画像のみ送信
                         print(f"{contest['name']} のコンテスト結果を送信しました。")
-                        self.retry_count = 0  # リトライカウントをリセット
                         return True
                     else:
                         print(f"結果送信チャンネルが見つかりません: {channel_id}")
@@ -615,7 +615,7 @@ class Contest_result(commands.Cog):
         await self._send_due_results()
 
     async def _send_due_results(self):
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         now_str = now.strftime("%Y-%m-%d %H:%M:%S")
         # サーバーごとに結果通知の有効化時刻を基準にし、それ以前に終了した
         # コンテストは送らない（導入直後の過去分一括送信を防ぐ）
@@ -643,6 +643,7 @@ class Contest_result(commands.Cog):
                 if self._result_send_failures.get(failure_key, 0) >= 10:
                     continue
                 if await self.send_contest_result(contest, guild_id):
+                    self._result_send_failures.pop(failure_key, None)
                     self.store.mark_delivered(KIND_RESULT_SENT, key, guild_id)
                     print(
                         f"{contest['name']} のコンテスト結果をサーバー {guild_id} に送信しました。"

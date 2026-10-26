@@ -14,6 +14,7 @@ from cogs.permission_checks import (
     can_manage_bot_settings,
     ensure_can_manage_bot_settings,
 )
+from cogs.time_utils import now_jst_naive
 from env.config import Config
 
 
@@ -95,7 +96,7 @@ class Reminder(commands.Cog):
             print("Error: ContestData cog not found or no contests loaded for 'check_no_abc_notification'.")
             return
 
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         today_date = now.date()
 
         if self.last_checked_date_no_abc == today_date:
@@ -320,7 +321,7 @@ class Reminder(commands.Cog):
     @tasks.loop(minutes=0.5)
     async def check_reminders(self):
         """設定された時間に基づいてリマインダーを送信する"""
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         contest_data_cog = self.bot.get_cog("ContestData")  # ContestData Cogを取得
         if not contest_data_cog:
             print("Error: ContestData cog not found!")
@@ -702,6 +703,10 @@ class CustomTimeModal(discord.ui.Modal, title="カスタム通知時間設定"):
         self.cog = cog
         self.guild_id = guild_id
         self.contest_type = contest_type
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        # 開いた後に副管理者ロールを剥奪された場合など、送信時にも再検査する
+        return await ensure_can_manage_bot_settings(interaction)
 
     async def on_submit(self, interaction: discord.Interaction):
         """モーダルが送信されたときのコールバック"""

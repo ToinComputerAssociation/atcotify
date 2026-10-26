@@ -18,6 +18,7 @@ from cogs.delivery_state import (
     contest_key,
     get_shared_store,
 )
+from cogs.time_utils import now_jst_naive
 
 THREADS_FILE = "asset/threads.yaml"
 CONTEST_TYPES = ["ABC", "ARC", "AGC", "AHC"]
@@ -52,7 +53,7 @@ class Threads(commands.Cog):
     @tasks.loop(minutes=1)
     async def check_contests_and_create_threads(self):
         """コンテストをチェックし、スレッドを作成する"""
-        now = datetime.datetime.now()
+        now = now_jst_naive()
         contest_data_cog = self.bot.get_cog("ContestData")  # ContestData Cogを取得
         if not contest_data_cog:
             print("Error: ContestData cog not found!")
