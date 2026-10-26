@@ -14,12 +14,9 @@ from cogs.permission_checks import (
     ensure_can_manage_bot_settings,
 )
 from cogs.delivery_state import (
-        KIND_THREADS_CREATED,
+    KIND_THREADS_CREATED,
     contest_key,
-    is_delivered,
-    load_delivery_state,
-    mark_delivered,
-    save_delivery_state,
+    get_shared_store,
 )
 
 THREADS_FILE = "asset/threads.yaml"
@@ -31,7 +28,7 @@ class Threads(commands.Cog):
         self.bot = bot
         self.check_contests_and_create_threads.start()
         self.threads_config = self.load_threads_config()
-        self.delivery_state = load_delivery_state()
+        self.store = get_shared_store()
 
     def load_threads_config(self):
         """スレッド設定をYAMLファイルから読み込む"""
@@ -77,8 +74,8 @@ class Threads(commands.Cog):
             for contest in contests:
                 # このサーバーでスレッド作成済みならスキップ（サーバーごとに記録）
                 key = contest_key(contest)
-                if is_delivered(
-                    self.delivery_state, KIND_THREADS_CREATED, key, guild_id_str
+                if self.store.is_delivered(
+                    KIND_THREADS_CREATED, key, guild_id_str
                 ):
                     continue
 
@@ -126,13 +123,9 @@ class Threads(commands.Cog):
                         print(f"スレッド {contest['name']} を作成しました")
 
                         # このサーバーでは作成済みとして記録する
-                        mark_delivered(
-                            self.delivery_state,
-                            KIND_THREADS_CREATED,
-                            key,
-                            guild_id_str,
+                        self.store.mark_delivered(
+                            KIND_THREADS_CREATED, key, guild_id_str
                         )
-                        save_delivery_state(self.delivery_state)
 
                     except discord.Forbidden:
                         print(

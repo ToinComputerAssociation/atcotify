@@ -22,10 +22,7 @@ from cogs.permission_checks import (
 from cogs.delivery_state import (
     KIND_RESULT_SENT,
     contest_key,
-    is_delivered,
-    load_delivery_state,
-    mark_delivered,
-    save_delivery_state,
+    get_shared_store,
 )
 from google.oauth2.service_account import Credentials
 from pdf2image import convert_from_path
@@ -56,7 +53,7 @@ class Contest_result(commands.Cog):
         self.results_config = self.load_results_config()
         self.contests = self.load_contests()
         self.check_contest_end.start()
-        self.delivery_state = load_delivery_state()
+        self.store = get_shared_store()
         # (コンテストキー, サーバーID) ごとの送信失敗回数。10回でそのペアは打ち切る
         self._result_send_failures: dict[tuple[str, str], int] = {}
 
@@ -601,11 +598,35 @@ class Contest_result(commands.Cog):
             "コンテスト結果送信チャンネルを選択してください", view=view, ephemeral=False
         )
 
+    def _current_contests(self):
+        """最新のコンテスト一覧を ContestData Cog から取得する。
+
+        起動時に読み込んだ self.contests は更新されないため、毎回こちらを使う。
+        ContestData が無い場合だけ起動時の読み込みにフォールバックする。
+        """
+        contest_data_cog = self.bot.get_cog("ContestData")
+        if contest_data_cog is not None and getattr(contest_data_cog, "contests", None):
+            return contest_data_cog.contests
+        return self.contests
+
     @tasks.loop(minutes=1)
     async def check_contest_end(self):
         """コンテスト終了時刻をチェックし、結果を自動送信する"""
+        await self._send_due_results()
+
+    async def _send_due_results(self):
         now = datetime.datetime.now()
-        for contest in self.contests:
+        now_str = now.strftime("%Y-%m-%d %H:%M:%S")
+        # サーバーごとに結果通知の有効化時刻を基準にし、それ以前に終了した
+        # コンテストは送らない（導入直後の過去分一括送信を防ぐ）
+        enabled_at_by_guild = {
+            guild_id: datetime.datetime.strptime(
+                self.store.ensure_result_enabled_at(guild_id, now_str),
+                "%Y-%m-%d %H:%M:%S",
+            )
+            for guild_id in self.results_config.keys()
+        }
+        for contest in self._current_contests():
             end_time = datetime.datetime.strptime(
                 contest["end_time"], "%Y-%m-%d %H:%M:%S"
             )
@@ -613,17 +634,16 @@ class Contest_result(commands.Cog):
                 continue
             # 送信済み判定はサーバーごとに行う。未送信のサーバーにだけ送る
             key = contest_key(contest)
-            for guild_id in self.results_config.keys():
-                if is_delivered(self.delivery_state, KIND_RESULT_SENT, key, guild_id):
+            for guild_id, enabled_at in enabled_at_by_guild.items():
+                if end_time <= enabled_at:
+                    continue
+                if self.store.is_delivered(KIND_RESULT_SENT, key, guild_id):
                     continue
                 failure_key = (key, str(guild_id))
                 if self._result_send_failures.get(failure_key, 0) >= 10:
                     continue
                 if await self.send_contest_result(contest, guild_id):
-                    mark_delivered(
-                        self.delivery_state, KIND_RESULT_SENT, key, guild_id
-                    )
-                    save_delivery_state(self.delivery_state)
+                    self.store.mark_delivered(KIND_RESULT_SENT, key, guild_id)
                     print(
                         f"{contest['name']} のコンテスト結果をサーバー {guild_id} に送信しました。"
                     )

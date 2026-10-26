@@ -10,6 +10,11 @@ from cogs.school_settings import (
 )
 
 
+def is_assignable_admin_role(role: discord.Role) -> bool:
+    """副管理者に指定できるロールか（@everyone は全員が対象になるため不可）。"""
+    return not role.is_default()
+
+
 class AdminRoles(commands.Cog):
     def __init__(self, bot: commands.Bot):
         self.bot = bot
@@ -23,6 +28,13 @@ class AdminRoles(commands.Cog):
     async def admin_role_set(
         self, interaction: discord.Interaction, role: discord.Role
     ):
+        if not is_assignable_admin_role(role):
+            await interaction.response.send_message(
+                "@everyone は副管理者に指定できません。"
+                "全員がBotの設定を変更できるようになってしまいます。",
+                ephemeral=True,
+            )
+            return
         set_admin_role_id_for_guild(interaction.guild_id, role.id)
         await interaction.response.send_message(
             f"副管理者ロールを {role.mention} に設定しました。"

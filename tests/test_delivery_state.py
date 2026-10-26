@@ -73,3 +73,24 @@ def test_state_survives_contest_list_refresh(state_path):
 
 def test_load_missing_file_returns_empty(state_path):
     assert ds.load_delivery_state(state_path) == ds.empty_delivery_state()
+
+
+def test_result_enabled_at_is_set_once():
+    state = ds.empty_delivery_state()
+    assert ds.get_result_enabled_at(state, 111) is None
+    assert ds.ensure_result_enabled_at(state, 111, "2026-10-26 12:00:00") == "2026-10-26 12:00:00"
+    # 2回呼んでも最初の値を保持する
+    assert ds.ensure_result_enabled_at(state, 111, "2026-10-27 12:00:00") == "2026-10-26 12:00:00"
+    assert ds.get_result_enabled_at(state, 222) is None
+
+
+def test_result_enabled_at_persists(state_path):
+    state = ds.empty_delivery_state()
+    ds.ensure_result_enabled_at(state, 111, "2026-10-26 12:00:00")
+    ds.save_delivery_state(state, state_path)
+    loaded = ds.load_delivery_state(state_path)
+    assert ds.get_result_enabled_at(loaded, 111) == "2026-10-26 12:00:00"
+
+
+def test_shared_store_is_singleton():
+    assert ds.get_shared_store() is ds.get_shared_store()
