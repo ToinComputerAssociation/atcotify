@@ -17,6 +17,11 @@ class Help(commands.Cog):
             inline=False,
         )
         embed.add_field(
+            name="`/setup [school_name]`",
+            value="初期設定コマンドです。学校を設定し、このサーバーの設定状況と次にやることを表示します。管理者または副管理者のみ実行できます。",
+            inline=False,
+        )
+        embed.add_field(
             name="`/reminder---set`",
             value="AtCoderのコンテストリマインダーを設定します。コンテストの種類、通知時間を選択できます。",
             inline=False,
@@ -58,12 +63,12 @@ class Help(commands.Cog):
         )   
         embed.add_field(
             name="`/school_set school_name school_type`",
-            value="このサーバーで表示・通知する学校名と中学/高校を設定します。管理者または許可ユーザーのみ実行できます。",
+            value="このサーバーで表示・通知する学校名と中学/高校を設定します。学校名はAJLの学校一覧から候補が出ます。管理者または副管理者のみ実行できます。",
             inline=False,
         )
         embed.add_field(
             name="`/school_unset`",
-            value="このサーバーの学校名設定を削除し、デフォルトの筑波大学附属中学校に戻します。管理者または許可ユーザーのみ実行できます。",
+            value="このサーバーの学校名設定を削除します（未設定に戻ります）。管理者または副管理者のみ実行できます。",
             inline=False,
         )
         embed.add_field(
@@ -84,6 +89,11 @@ class Help(commands.Cog):
         embed.add_field(
             name="`/school_student_rank_set_ch` / `/school_student_rank_unset_ch`",
             value="生徒順位の定期通知チャンネルを設定・解除します。管理者または許可ユーザーのみ実行できます。",
+            inline=False,
+        )
+        embed.add_field(
+            name="`/admin_role_set role` / `/admin_role_unset` / `/admin_role_show`",
+            value="副管理者ロールを設定・解除・確認します。設定と解除はサーバー管理者のみ、確認は管理者と副管理者が実行できます。副管理者はBotの設定を変更できます。",
             inline=False,
         )
         embed.add_field(
