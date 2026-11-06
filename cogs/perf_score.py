@@ -15,7 +15,7 @@ def perf_to_score(performance: float) -> float:
 
 def displayed_perf_to_internal_perf(performance: float) -> float:
     if performance <= 0:
-        raise ValueError("displayed performance must be positive")
+        raise ValueError("表示perfは正の数である必要があります")
     if performance >= 400:
         return performance
     return 400 + 400 * math.log(performance / 400)
@@ -33,7 +33,7 @@ def perfs_to_score(performances: list[float]) -> float:
 
 def score_to_perf(score: float) -> float:
     if score <= 0:
-        raise ValueError("score must be positive")
+        raise ValueError("スコアは正の数である必要があります")
     return 400 * math.log2(score / 1000)
 
 
