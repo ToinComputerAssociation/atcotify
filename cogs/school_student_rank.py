@@ -12,7 +12,6 @@ from discord.ext import commands, tasks
 import calculate_hash
 from cogs.permission_checks import can_manage_bot_settings
 from cogs.school_settings import (
-    DEFAULT_SCHOOL_NAME,
     DEFAULT_SCHOOL_TYPE,
     SCHOOL_NOT_SET_MESSAGE,
     format_school_label,
@@ -33,7 +32,6 @@ with open("asset/school_abbreviations.yaml", encoding="utf-8") as f:
 
 HTML_DIR = Path("html")
 SCHOOL_STUDENT_RANK_FILE = Path("asset/school_student_rank.yaml")
-LEGACY_TSUKUBA_STUDENT_RANK_FILE = Path("asset/tsukuba_student_rank.yaml")
 GRADE_A_BASE_URL = f"https://img.atcoder.jp/ajl{YEAR}{{}}/grade_{{}}_rankings_A_score.html"
 GRADE_H_BASE_URL = f"https://img.atcoder.jp/ajl{YEAR}{{}}/grade_{{}}_rankings_H_score.html"
 CONTEST_TYPES = ("A", "H")
@@ -110,21 +108,12 @@ def load_school_student_rank_history() -> dict[str, Any]:
     if SCHOOL_STUDENT_RANK_FILE.exists():
         with SCHOOL_STUDENT_RANK_FILE.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-    elif LEGACY_TSUKUBA_STUDENT_RANK_FILE.exists():
-        with LEGACY_TSUKUBA_STUDENT_RANK_FILE.open("r", encoding="utf-8") as f:
-            legacy_data = yaml.safe_load(f) or {}
-        data = {
-            student_history_key(DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE): legacy_data
-        }
     else:
         data = {}
 
-    if all(key in data for key in RANK_KEYS):
-        data = {student_history_key(DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE): data}
     for key in list(data.keys()):
         if ":" not in str(key) and isinstance(data[key], dict):
             data[student_history_key(str(key), DEFAULT_SCHOOL_TYPE)] = data.pop(key)
-    ensure_student_history(data, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE)
     return data
 
 
@@ -534,15 +523,6 @@ class SchoolStudentRank(commands.Cog):
 
         await self.send_school_student_rank(interaction, school[0], school[1])
 
-    @app_commands.command(
-        name="tsukuba_student_rank",
-        description="筑波大学附属中学校の生徒の順位を表示します。",
-    )
-    async def tsukuba_student_rank(self, interaction: discord.Interaction):
-        await self.send_school_student_rank(
-            interaction, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE
-        )
-
     @tasks.loop(minutes=15)
     async def check_school_student_rank_loop(self):
         print("Checking School Student Rank...")
@@ -550,9 +530,7 @@ class SchoolStudentRank(commands.Cog):
             history = load_school_student_rank_history()
             target_guilds = []
             for guild_id, guild_settings in iter_guild_settings():
-                channel_id = guild_settings.get(
-                    "school_student_rank_channel_id"
-                ) or guild_settings.get("tsukuba_student_rank_channel_id")
+                channel_id = guild_settings.get("school_student_rank_channel_id")
                 school = get_school_for_guild(guild_id)
                 if channel_id and school is not None:
                     target_guilds.append(
@@ -656,9 +634,7 @@ class SchoolStudentRank(commands.Cog):
             return
 
         removed = unset_channel_id_for_guild(
-            interaction.guild_id,
-            "school_student_rank_channel_id",
-            "tsukuba_student_rank_channel_id",
+            interaction.guild_id, "school_student_rank_channel_id"
         )
         description = (
             "生徒順位通知チャンネルを解除しました。"
@@ -671,25 +647,6 @@ class SchoolStudentRank(commands.Cog):
             color=discord.Color.green() if removed else discord.Color.blue(),
         )
         await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(
-        name="tsukuba_student_rank---set_ch",
-        description="筑波大学附属中学校の生徒の順位通知チャンネルを設定します。",
-    )
-    @can_manage_bot_settings()
-    async def tsukuba_student_rank_set_channel(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
-        await self.school_student_rank_set_channel.callback(self, interaction, channel)
-
-    @app_commands.command(
-        name="tsukuba_student_rank---unset_ch",
-        description="筑波大学附属中学校の生徒の順位通知チャンネルを解除します。",
-    )
-    @can_manage_bot_settings()
-    async def tsukuba_student_rank_unset_channel(self, interaction: discord.Interaction):
-        await self.school_student_rank_unset_channel.callback(self, interaction)
-
 
 async def setup(bot):
     await bot.add_cog(SchoolStudentRank(bot))

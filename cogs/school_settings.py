@@ -4,9 +4,7 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-# 旧デフォルト校。/tsukuba_rank など筑波専用コマンドが明示的に使うだけで、
-# サーバー設定の未設定時のフォールバックには使わない（未設定は None を返す）。
-DEFAULT_SCHOOL_NAME = "筑波大学附属中学校"
+# 学校種別のデフォルト。学校名自体にデフォルトは無く、未設定は None を返す。
 DEFAULT_SCHOOL_TYPE = "junior_high"
 
 SCHOOL_NOT_SET_MESSAGE = (

@@ -17,7 +17,6 @@ from PIL import Image, ImageDraw, ImageFont
 import calculate_hash
 from cogs.permission_checks import can_manage_bot_settings
 from cogs.school_settings import (
-    DEFAULT_SCHOOL_NAME,
     DEFAULT_SCHOOL_TYPE,
     SCHOOL_NOT_SET_MESSAGE,
     format_school_label,
@@ -41,7 +40,6 @@ with open("asset/school_abbreviations.yaml", encoding="utf-8") as f:
 
 HTML_DIR = Path("html")
 SCHOOL_RANK_FILE = Path("asset/school_rank.yaml")
-LEGACY_TSUKUBA_RANK_FILE = Path("asset/tsukuba_rank.yaml")
 AJL_RANKING_BASE_URL = f"https://img.atcoder.jp/ajl{YEAR}{{}}/school_rankings_grades_{{}}_{{}}.html"
 AJL_PERSONAL_RANKING_BASE_URL = (
     f"https://img.atcoder.jp/ajl{YEAR}{{}}/grade_{{}}_rankings_{{}}_{{}}.html"
@@ -175,19 +173,12 @@ def load_school_rank_history() -> dict[str, Any]:
     if SCHOOL_RANK_FILE.exists():
         with SCHOOL_RANK_FILE.open("r", encoding="utf-8") as f:
             data = yaml.safe_load(f) or {}
-    elif LEGACY_TSUKUBA_RANK_FILE.exists():
-        with LEGACY_TSUKUBA_RANK_FILE.open("r", encoding="utf-8") as f:
-            legacy_data = yaml.safe_load(f) or {}
-        data = {school_history_key(DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE): legacy_data}
     else:
         data = {}
 
-    if all(contest_type in data for contest_type in CONTEST_TYPES):
-        data = {school_history_key(DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE): data}
     for key in list(data.keys()):
         if ":" not in str(key) and isinstance(data[key], dict):
             data[school_history_key(str(key), DEFAULT_SCHOOL_TYPE)] = data.pop(key)
-    ensure_school_rank_history(data, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE)
     return data
 
 
@@ -1444,13 +1435,6 @@ class SchoolRank(commands.Cog):
 
         await self.send_school_rank(interaction, school[0], school[1])
 
-    @app_commands.command(
-        name="tsukuba_rank",
-        description="現在のAJLの筑波大学附属中学校の順位を表示します。",
-    )
-    async def tsukuba_rank(self, interaction: discord.Interaction):
-        await self.send_school_rank(interaction, DEFAULT_SCHOOL_NAME, DEFAULT_SCHOOL_TYPE)
-
     @tasks.loop(minutes=15)
     async def check_school_rank_loop(self):
         print("Checking School Rank...")
@@ -1458,9 +1442,7 @@ class SchoolRank(commands.Cog):
             history = load_school_rank_history()
             target_guilds = []
             for guild_id, guild_settings in iter_guild_settings():
-                channel_id = guild_settings.get("school_rank_channel_id") or guild_settings.get(
-                    "tsukuba_rank_channel_id"
-                )
+                channel_id = guild_settings.get("school_rank_channel_id")
                 school = get_school_for_guild(guild_id)
                 if channel_id and school is not None:
                     target_guilds.append(
@@ -1577,7 +1559,7 @@ class SchoolRank(commands.Cog):
             return
 
         removed = unset_channel_id_for_guild(
-            interaction.guild_id, "school_rank_channel_id", "tsukuba_rank_channel_id"
+            interaction.guild_id, "school_rank_channel_id"
         )
         description = (
             "学校順位通知チャンネルを解除しました。"
@@ -1590,25 +1572,6 @@ class SchoolRank(commands.Cog):
             color=discord.Color.green() if removed else discord.Color.blue(),
         )
         await interaction.response.send_message(embed=embed)
-
-    @app_commands.command(
-        name="tsukuba_rank---set_ch",
-        description="筑波大学附属中学校の順位通知チャンネルを設定します。",
-    )
-    @can_manage_bot_settings()
-    async def tsukuba_rank_set_channel(
-        self, interaction: discord.Interaction, channel: discord.TextChannel
-    ):
-        await self.school_rank_set_channel.callback(self, interaction, channel)
-
-    @app_commands.command(
-        name="tsukuba_rank---unset_ch",
-        description="筑波大学附属中学校の順位通知チャンネルを解除します。",
-    )
-    @can_manage_bot_settings()
-    async def tsukuba_rank_unset_channel(self, interaction: discord.Interaction):
-        await self.school_rank_unset_channel.callback(self, interaction)
-
 
 async def setup(bot):
     await bot.add_cog(SchoolRank(bot))
