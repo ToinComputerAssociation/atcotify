@@ -106,17 +106,31 @@ class ContributorScore:
     rating: int | None = None
 
 
+def school_key(school_name: str) -> str:
+    """略称辞書を引くための共通キー（部門接尾辞を除いた語幹）。"""
+    name = school_name.strip()
+    if name.endswith("高等学校附属中学校"):
+        return name[:-9]
+    if name.endswith("中学校"):
+        return name[:-3]
+    if name.endswith("高等学校"):
+        return name[:-4]
+    if name.endswith("高等専門学校"):
+        return name[:-6]
+    return name
+
+
 def abbreviate_school_name(school_name: Any) -> Any:
     if isinstance(school_name, str):
-        for full_name, abbreviation in school_abbreviations.items():
-            if str(full_name).strip() == school_name.strip():
-                return abbreviation
+        abbreviation = school_abbreviations.get(school_key(school_name))
+        if isinstance(abbreviation, str) and abbreviation.strip():
+            return abbreviation
         if school_name.endswith("高等専門学校"):
             return school_name[:-6] + "高専"
         if school_name.endswith("高等学校"):
             return school_name[:-4] + "高校"
         if school_name.endswith("中学校"):
-            return school_name[:-3]
+            return school_name[:-3] + "中学"
     return school_name
 
 
@@ -125,10 +139,6 @@ def school_search_texts(school_name: str) -> set[str]:
     abbreviated = abbreviate_school_name(school_name)
     if isinstance(abbreviated, str):
         texts.add(abbreviated.strip())
-
-    for full_name, abbreviation in school_abbreviations.items():
-        if str(full_name).strip() == school_name:
-            texts.add(str(abbreviation).strip())
 
     return {text for text in texts if text}
 
